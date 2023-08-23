@@ -7,13 +7,15 @@ import binascii
 import nfc
 from functools import partial
 import requests
+import os
 
 import user_list
+users = user_list.users
+
 import line_notify_tokens
+line_notify_token = line_notify_tokens.tokens["personal"]
 
 
-#clf = nfc.ContactlessFrontend('usb')
-#print(clf, "\n")
 
 def main(page: ft.Page):
     
@@ -24,19 +26,34 @@ def main(page: ft.Page):
     page.padding = 50
     page.window_height = 800
     page.window_width = 800
-    
-    users = user_list.users
-    tokens = line_notify_tokens.tokens
-    
 
     def send_line_notify(notification_message):
-        line_notify_token = tokens["personal"]
         line_notify_api = 'https://notify-api.line.me/api/notify'
         headers = {'Authorization': f'Bearer {line_notify_token}'}
         data = {'message': f'\n{notification_message}'}
         requests.post(line_notify_api, headers = headers, data = data)
+    
+    def logging():
+        now = datetime.now()
+        now_str = now.strftime("%m.%d %a %H:%M:%S")
+        today_str = now.strftime("%Y_%m_%d")
+        filepath = f"log/{today_str}.txt"
+        
+        if os.path.exists(filepath):
+            mode="a"
+        else:
+            mode="x"
+        
+        with open(filepath, mode, encoding="utf-8") as f:
+            f.write(f"{now_str}\t{message_box.value}\n")
+        
+        log_box.value=log_box.value + f"{now_str} {message_box.value}\n"        
+        page.update()
+        time.sleep(2)
+        message_box.value="Hello"
+        page.update()
 
-    # buttonがクリックされたときのコールバック
+    # チェックインボタンがクリックされたときのコールバック
     def check_in(e):
         message_box.value = "IDカードをスキャンしてください"     # textの文字を変更
         message_box.update()
@@ -47,15 +64,11 @@ def main(page: ft.Page):
             message_box.value = f"ID={id}は登録されていません"
         else:
             message_box.value = f"{username}さんがチェックインしました"
-            send_line_notify(message_box.value)
-        
-        now_str = datetime.now().strftime("%m.%d %a %H:%M")
+            send_line_notify(f"{message_box.value}")
         page.update()
-        time.sleep(2)
-        log_box.value=log_box.value + f"{now_str} {message_box.value}\n"
-        message_box.value="Hello"
-        page.update()
+        logging()
 
+    # チェックアウトボタンがクリックされたときのコールバック
     def check_out(e):
         message_box.value = "IDカードをスキャンしてください"     # textの文字を変更
         message_box.update()
@@ -66,14 +79,9 @@ def main(page: ft.Page):
             message_box.value = f"ID={id}は登録されていません"
         else:
             message_box.value = f"{username}さんがチェックアウトしました"
-            send_line_notify(message_box.value)
-        
-        now_str = datetime.now().strftime("%m.%d %a %H:%M")
+            send_line_notify(f"{message_box.value}")
         page.update()
-        time.sleep(2)
-        log_box.value=log_box.value + f"{now_str} {message_box.value}\n"
-        message_box.value="Hello"
-        page.update()       
+        logging()      
 
         
     ### NFCを読み取るときのタイムアウト処理
