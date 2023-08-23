@@ -6,6 +6,11 @@ import time
 import binascii
 import nfc
 from functools import partial
+import requests
+
+import user_list
+import line_notify_tokens
+
 
 #clf = nfc.ContactlessFrontend('usb')
 #print(clf, "\n")
@@ -19,63 +24,57 @@ def main(page: ft.Page):
     page.padding = 50
     page.window_height = 800
     page.window_width = 800
-
-
     
-    # buttonがクリックされたときのコールバック
-    def change_text(e):
-        text.value = "You Clicked!"     # textの文字を変更
-        text.color = ft.colors.RED_700  # textの色を変更
-        text.size = 40                  # textのサイズを変更
-        button.visible = False          # ボタンを非表示
-        page.update()                   # pageを更新
+    users = user_list.users
+    tokens = line_notify_tokens.tokens
+    
+
+    def send_line_notify(notification_message):
+        line_notify_token = tokens["personal"]
+        line_notify_api = 'https://notify-api.line.me/api/notify'
+        headers = {'Authorization': f'Bearer {line_notify_token}'}
+        data = {'message': f'\n{notification_message}'}
+        requests.post(line_notify_api, headers = headers, data = data)
 
     # buttonがクリックされたときのコールバック
     def check_in(e):
         message_box.value = "IDカードをスキャンしてください"     # textの文字を変更
         message_box.update()
-        id = read_nfc(timeout=5)
+        id, username = read_nfc(timeout=5)
         if id is None:
-            message_box.value = "タイムアウトしました"
+            message_box.value = "IDカードの読み取りがタイムアウトしました"
+        elif username is None:
+            message_box.value = f"ID={id}は登録されていません"
         else:
-            message_box.value = f"{id}さんチェックインしました"
-            now_str = datetime.now().strftime("%m.%d %a %H:%M")
-            log_box.value=log_box.value + f"{now_str}\t{id}さん\tチェックイン\n"
-            page.update()
-            time.sleep(2)
-            message_box.value="Hello"
+            message_box.value = f"{username}さんがチェックインしました"
+            send_line_notify(message_box.value)
+        
+        now_str = datetime.now().strftime("%m.%d %a %H:%M")
+        page.update()
+        time.sleep(2)
+        log_box.value=log_box.value + f"{now_str} {message_box.value}\n"
+        message_box.value="Hello"
         page.update()
 
     def check_out(e):
         message_box.value = "IDカードをスキャンしてください"     # textの文字を変更
         message_box.update()
-        id = read_nfc(timeout=5)
+        id, username = read_nfc(timeout=5)
         if id is None:
-            message_box.value = "タイムアウトしました"
+            message_box.value = "IDカードの読み取りがタイムアウトしました"
+        elif username is None:
+            message_box.value = f"ID={id}は登録されていません"
         else:
-            message_box.value = f"{id}さんチェックアウトしました"
-            now_str = datetime.now().strftime("%m.%d %a %H:%M")
-            log_box.value=log_box.value + f"{now_str}\t{id}さん\tチェックアウト\n"
-            page.update()
-            time.sleep(2)
-            message_box.value="Hello"
-        page.update()        
+            message_box.value = f"{username}さんがチェックアウトしました"
+            send_line_notify(message_box.value)
+        
+        now_str = datetime.now().strftime("%m.%d %a %H:%M")
+        page.update()
+        time.sleep(2)
+        log_box.value=log_box.value + f"{now_str} {message_box.value}\n"
+        message_box.value="Hello"
+        page.update()       
 
-
-    def register_id(e):
-        message_box.value = "IDカードをスキャンしてください"     # textの文字を変更
-        message_box.update()
-        id = read_nfc(timeout=5)
-        if id is None:
-            message_box.value = "タイムアウトしました"
-        else:
-            message_box.value = f"{id}を登録します"
-            now_str = datetime.now().strftime("%m.%d %a %H:%M")
-            log_box.value=log_box.value + f"{now_str}\t{id}\t登録\n"
-            page.update()
-            time.sleep(2)
-            message_box.value="Hello"
-        page.update()        
         
     ### NFCを読み取るときのタイムアウト処理
     ### https://www.kosh.dev/article/3/
@@ -83,7 +82,7 @@ def main(page: ft.Page):
         return time.time()-t0 > n
     
     def read_nfc(timeout=5):
-        id = 0
+        username = None
         with nfc.ContactlessFrontend('usb') as clf:
             t0 = time.time()
             tag = clf.connect(
@@ -93,7 +92,10 @@ def main(page: ft.Page):
                 id = None
             else:
                 id=binascii.hexlify(tag.idm).decode()
-        return id
+            
+            if id in users.keys():
+                username = users[id]
+        return id, username
     ###################
 
         
@@ -112,11 +114,10 @@ def main(page: ft.Page):
     # クリックされたときのコールバックとしてchenge_textを実行
     button_in = ft.ElevatedButton("チェックイン", width=120, height=40, on_click=check_in)
     button_out = ft.ElevatedButton("チェックアウト", width=120, height=40, on_click=check_out)
-    button_regist = ft.ElevatedButton("ID登録", width=120, height=40, on_click=register_id)
 
     
     # コントロールを部品に追加
-    page.add(ft.Row([datetime_text, button_in, button_out, button_regist]))
+    page.add(ft.Row([datetime_text, button_in, button_out]))
     page.add(message_box)
     page.add(log_box)
 
