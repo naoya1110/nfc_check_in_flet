@@ -8,6 +8,7 @@ import nfc
 from functools import partial
 import requests
 import os
+import random
 
 import user_list
 users = user_list.users
@@ -15,7 +16,24 @@ users = user_list.users
 import line_notify_tokens
 line_notify_token = line_notify_tokens.tokens["personal"]
 
+## avators_dict = {"name":ft.CircleAvatar(content=ft.Text(name[:2]))"}
+avators_dict = {}
 
+class Avator:
+    def __init__(self, username):
+        self.username = username
+    
+    def create(self):
+        r = random.randint(100, 200)
+        g = random.randint(100, 200)
+        b = random.randint(100, 200)
+        colorcode = f'#{r:02X}{g:02X}{b:02X}'
+        avator = ft.CircleAvatar(content=ft.Text(self.username[:2]),
+                                bgcolor=colorcode,
+                                color="#FFFFFF",
+                                radius=30)
+        return avator
+        
 
 def main(page: ft.Page):
     
@@ -55,33 +73,48 @@ def main(page: ft.Page):
 
     # チェックインボタンがクリックされたときのコールバック
     def check_in(e):
+        global avators_dict
         message_box.value = "IDカードをスキャンしてください"     # textの文字を変更
         message_box.update()
-        id, username = read_nfc(timeout=5)
+        id, username, now = read_nfc(timeout=5)
         if id is None:
             message_box.value = "IDカードの読み取りがタイムアウトしました"
         elif username is None:
             message_box.value = f"ID={id}は登録されていません"
         else:
             message_box.value = f"{username}さんがチェックインしました"
-            send_line_notify(f"{message_box.value}")
+            send_line_notify(f"{now.strftime('%m/%d %H:%M')}\n{message_box.value}")
+            #avators_dict[username]=ft.CircleAvatar(content=ft.Text(username[:2]))
+            avators_dict[username]=Avator(username).create()
+            update_avators(avators_dict)
         page.update()
         logging()
 
     # チェックアウトボタンがクリックされたときのコールバック
     def check_out(e):
+        global avators_dict
         message_box.value = "IDカードをスキャンしてください"     # textの文字を変更
         message_box.update()
-        id, username = read_nfc(timeout=5)
+        id, username, now = read_nfc(timeout=5)
         if id is None:
             message_box.value = "IDカードの読み取りがタイムアウトしました"
         elif username is None:
             message_box.value = f"ID={id}は登録されていません"
         else:
             message_box.value = f"{username}さんがチェックアウトしました"
-            send_line_notify(f"{message_box.value}")
+            send_line_notify(f"{now.strftime('%m/%d %H:%M')}\n{message_box.value}")
+            if username in avators_dict.keys():
+                avators_dict.pop(username)
+                update_avators(avators_dict)
         page.update()
-        logging()      
+        logging()
+    
+    def update_avators(avators_dict):
+        avators_list = []
+        for avator in avators_dict.values():
+            avators_list.append(avator)
+        avators_row.controls=avators_list
+        page.update
 
         
     ### NFCを読み取るときのタイムアウト処理
@@ -103,7 +136,8 @@ def main(page: ft.Page):
             
             if id in users.keys():
                 username = users[id]
-        return id, username
+            now = datetime.now()
+        return id, username, now
     ###################
 
         
@@ -123,10 +157,19 @@ def main(page: ft.Page):
     button_in = ft.ElevatedButton("チェックイン", width=120, height=40, on_click=check_in)
     button_out = ft.ElevatedButton("チェックアウト", width=120, height=40, on_click=check_out)
 
+
+    
+    avators_row = ft.Row([], wrap=True)
     
     # コントロールを部品に追加
     page.add(ft.Row([datetime_text, button_in, button_out]))
     page.add(message_box)
+    page.add(ft.Container(content=avators_row,
+                        height=150,
+                        width=page.window_width-100,
+                        border=ft.border.all(1, ft.colors.BLACK),
+                        border_radius=ft.border_radius.all(5),
+                        padding=ft.padding.all(10)))
     page.add(log_box)
 
 
